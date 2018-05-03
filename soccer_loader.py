@@ -1,13 +1,7 @@
 from __future__ import print_function
 import torch
 from torch.utils.data.dataset import Dataset
-from torch.utils.data.sampler import SubsetRandomSampler
 import pandas as pd
-import numpy as np
-
-test_subset = 0.2
-batch_size = 100
-dataset_path = 'match_odds_only.pkl'
 
 
 class SoccerDataset(Dataset):
@@ -29,16 +23,46 @@ class SoccerDataset(Dataset):
             'match_result'
         ]
 
+        # Convert to tensor during creation, so indexing is fast operation
+        self.features = torch.FloatTensor(self.df[self.input_features].values)
+        self.label = torch.LongTensor(self.df[self.output_features].values)
+
     def __getitem__(self, index):
-        features = self.df[self.input_features].iloc[index].values
-        output = self.df[self.output_features].iloc[index].values
-
-        # Make them Float tensor
-        x = torch.FloatTensor(features)
-        y = torch.LongTensor(output)
-
-        # Return item
-        return (x, y)
+        features = self.features[index]
+        label = self.label[index]
+        return (features, label)
 
     def __len__(self):
         return self.df.shape[0]
+
+
+def get_match_datasets(feature_path, label_path):
+    features = torch.load(feature_path)
+    labels = torch.load(label_path)
+
+    features = features.view(features.shape[0], features.shape[1] * features.shape[2])
+    features.shape[1]
+    means = features.mean(dim=1).unsqueeze(-1)
+    std = features.std(dim=1).unsqueeze(-1)
+    print(features.shape)
+    print(means.shape)
+    features.sub_(means)
+    features.div_(std)
+
+    test_pcent = 0.2
+    idx = int(features.shape[0] * test_pcent)
+    return MatchDataset(features[idx:], labels[idx:]), MatchDataset(features[:idx], labels[:idx])
+
+
+class MatchDataset(Dataset):
+    def __init__(self, features, labels):
+        self.features = features.clone()
+        self.labels = labels.clone()
+
+    def __getitem__(self, index):
+        features = self.features[index]
+        label = self.labels[index]
+        return (features, label)
+
+    def __len__(self):
+        return self.features.shape[0]
